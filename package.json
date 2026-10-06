@@ -1,0 +1,31 @@
+{
+  "name": "projeto-tcc-senai-andpanelas-ia-chefinho",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mthenryx/projeto-tcc-senai-andpanelas-ia-chefinho.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/mthenryx/projeto-tcc-senai-andpanelas-ia-chefinho/issues"
+  },
+  "homepage": "https://github.com/mthenryx/projeto-tcc-senai-andpanelas-ia-chefinho#readme",
+  "dependencies": {
+    "@langchain/core": "^1.2.16",
+    "@langchain/google-genai": "^2.3.2",
+    "dotenv": "^18.0.5"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}
