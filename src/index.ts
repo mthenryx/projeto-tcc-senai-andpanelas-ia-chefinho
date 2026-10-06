@@ -4,25 +4,26 @@ import * as fs from "fs";
 import * as path from "path";
 import "dotenv/config";
 
-// Função para converter imagem local em Base64 para o modelo ler
+// Função para converter imagem local em Base64
 function fileToBase64(filePath: string): string {
   const fileBuffer = fs.readFileSync(filePath);
   return fileBuffer.toString("base64");
 }
 
 async function main() {
-  // 1. Inicializa o modelo Gemini Flash gratuito via LangChain
+  // Inicializa o modelo Gemini Flash
   const model = new ChatGoogleGenerativeAI({
-    model: "gemini-2.5-flash",
+    model: "gemini-3.8-flash",   // era "gemini-2.5-flash"
     temperature: 0.7,
     apiKey: process.env.GOOGLE_API_KEY,
   });
 
-  // 2. Coloque uma imagem de teste na mesma pasta e coloque o nome dela aqui
-  const imagePath = path.join(__dirname, "teste.jpg");
+  // Caminho da imagem considerando a pasta utils/teste.jpg
+  // Usamos process.cwd() para pegar a raiz do projeto de forma segura
+  const imagePath = path.join(process.cwd(), "src", "utils", "teste.jpg");
   const base64Image = fileToBase64(imagePath);
 
-  // 3. Monta a mensagem multimodal (Texto + Imagem)
+  // Monta a mensagem multimodal
   const message = new HumanMessage({
     content: [
       {
@@ -39,8 +40,6 @@ async function main() {
   });
 
   console.log("Enviando imagem e texto para o Gemini Flash...");
-  
-  // 4. Executa a chamada
   const response = await model.invoke([message]);
   
   console.log("\nResposta da IA:");
