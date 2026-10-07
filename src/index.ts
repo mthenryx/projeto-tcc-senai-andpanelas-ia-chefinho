@@ -12,7 +12,7 @@ function fileToBase64(filePath: string): string {
 async function main() {
 
   const model = new ChatGoogleGenerativeAI({
-    model: "gemini-3.8-flash",  
+    model: "gemini-3.5-flash-lite",
     temperature: 0.7,
     apiKey: process.env.GOOGLE_API_KEY,
   });
@@ -35,11 +35,7 @@ async function main() {
     ],
   });
 
-  console.log("Enviando imagem e texto para o Gemini Flash...");
   const response = await model.invoke([message]);
-  
-  console.log("\nResposta da IA:");
-  console.log(response.content);
 }
 
 main().catch(console.error);
