@@ -51,3 +51,10 @@ Veja a pasta [`docs/`](docs/README.md).
 | `npm start` | Roda a versão compilada |
 | `npm run typecheck` | Verifica os tipos |
 | `npm test` | Roda os testes |
+
+> **Aviso:** Como ainda não possuo conhecimento aprofundado sobre todos os assuntos abordados neste projeto, algumas informações foram obtidas de fontes externas. Abaixo, deixo os links e os devidos créditos aos autores.
+>
+> A Inteligência Artificial também foi utilizada como ferramenta de apoio durante o desenvolvimento, auxiliando em pesquisas, dúvidas, organização e implementação.
+>
+> **Fontes e créditos:**  
+> - [OpenAI e LangChain na Prática: Criando um agente multi-ferramentas com Node.js, Express e TypeScript](https://www.youtube.com/live/BG6klyyHI2o?si=0tq_PsQqz468TAFl) — Daniel Castro
