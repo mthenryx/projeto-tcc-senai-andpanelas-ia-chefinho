@@ -50,23 +50,63 @@ export async function prepararImagem(url: string): Promise<ImagemPreparada> {
 }
 
 export interface ImagemEntrada {
-  rotulo: string; // ex.: "Foto da receita"
+  rotulo: string;
   url?: string | null;
+  ignorarFalha?: boolean;
 }
 
 // Devolve os blocos de conteúdo (rótulo + imagem) prontos para uma HumanMessage.
 // Entradas sem URL são ignoradas.
-export async function blocosDeImagens(entradas: ImagemEntrada[]): Promise<MessageContentComplex[]> {
-  const comUrl = entradas.filter((e): e is ImagemEntrada & { url: string } => !!e.url);
-  const prontas = await Promise.all(comUrl.map((e) => prepararImagem(e.url)));
+export async function blocosDeImagens(
+  entradas: ImagemEntrada[]
+): Promise<MessageContentComplex[]> {
+  const comUrl = entradas.filter(
+    (e): e is ImagemEntrada & { url: string } => !!e.url
+  );
 
-  return comUrl.flatMap((e, i) => [
-    { type: "text", text: `${e.rotulo}:` },
-    {
-      type: "image_url",
-      image_url: { url: `data:${prontas[i].mimeType};base64,${prontas[i].base64}` },
-    },
-  ]);
+  const resultados = await Promise.all(
+    comUrl.map(async (entrada) => {
+      try {
+        const preparada = await prepararImagem(entrada.url);
+
+        return {
+          entrada,
+          preparada,
+        };
+      } catch (erro) {
+        if (!entrada.ignorarFalha) {
+          throw erro;
+        }
+
+        console.warn(
+          `[tool:imagem] Não foi possível carregar "${entrada.rotulo}". A imagem será ignorada.`
+        );
+
+        return null;
+      }
+    })
+  );
+
+  return resultados.flatMap(
+    (resultado): MessageContentComplex[] => {
+      if (!resultado) return [];
+
+      const { entrada, preparada } = resultado;
+
+      return [
+        {
+          type: "text",
+          text: `${entrada.rotulo}:`,
+        },
+        {
+          type: "image_url",
+          image_url: {
+            url: `data:${preparada.mimeType};base64,${preparada.base64}`,
+          },
+        },
+      ];
+    }
+  );
 }
 
 // ---------------------------------------------------------------------------
