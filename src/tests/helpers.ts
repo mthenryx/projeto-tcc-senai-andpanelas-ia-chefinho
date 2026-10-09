@@ -24,8 +24,11 @@ export function respostaGemini(texto: string) {
 
 export interface EstadoMock {
   googleRequests: any[];
+  googleUrls: string[];
   midias: Record<string, { status?: number; body: Buffer }>;
-  responderGemini: (corpo: any) => { status: number; body: any };
+  responderGemini: (corpo: any, url: string) => { status: number; body: any };
+  // Respostas das APIs da Wikimedia; "pendurar" simula um servidor que não responde
+  wikimedia: (url: string) => { status: number; body: any } | "pendurar";
 }
 
 // Troca o fetch global: o Google e as URLs de mídia são simulados; o resto passa direto
@@ -33,8 +36,10 @@ export function instalarMocks() {
   const fetchReal = globalThis.fetch;
   const estado: EstadoMock = {
     googleRequests: [],
+    googleUrls: [],
     midias: {},
     responderGemini: () => respostaGemini("Resposta padrão"),
+    wikimedia: () => ({ status: 404, body: {} }),
   };
 
   globalThis.fetch = (async (entrada: any, init?: any) => {
@@ -43,9 +48,25 @@ export function instalarMocks() {
     if (url.includes("generativelanguage.googleapis.com")) {
       const corpo = JSON.parse(init?.body ?? "{}");
       estado.googleRequests.push(corpo);
-      const { status, body } = estado.responderGemini(corpo);
+      estado.googleUrls.push(url);
+      const { status, body } = estado.responderGemini(corpo, url);
       return new Response(JSON.stringify(body), {
         status,
+        headers: { "content-type": "application/json" },
+      });
+    }
+
+    if (url.includes("wikipedia.org/") || url.includes("wikimedia.org/w/")) {
+      const resposta = estado.wikimedia(url);
+      if (resposta === "pendurar") {
+        return new Promise<Response>((_, rejeitar) =>
+          init?.signal?.addEventListener("abort", () =>
+            rejeitar(Object.assign(new Error("tempo esgotado"), { name: "TimeoutError" }))
+          )
+        );
+      }
+      return new Response(JSON.stringify(resposta.body), {
+        status: resposta.status,
         headers: { "content-type": "application/json" },
       });
     }

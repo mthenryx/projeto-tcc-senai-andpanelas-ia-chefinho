@@ -127,15 +127,22 @@ No PowerShell: `Invoke-RestMethod http://localhost:3001/v1/chefinho/status`
 
 Para as rotas POST, o mais simples é usar Postman ou Insomnia com `Body → raw → JSON` e os exemplos de cada documento.
 
-## Provedores de imagem e vídeo (pendente)
+## Provedores de imagem e vídeo
 
-O provedor externo que busca mídia nova para receitas geradas (rota de pesquisa) **ainda não foi definido**. Os arquivos `src/tools/image.tool.ts` e `src/tools/video.tool.ts` já têm a interface `ProvedorDeImagem` / `ProvedorDeVideo`. Quando houver um provedor, basta implementá-la e registrá-la na inicialização:
+Usados pela rota de pesquisa para completar uma receita sugerida. **A foto é obrigatória**: se nenhum provedor entregar uma foto válida, a rota responde `TOOL_ERROR` e nenhuma sugestão é devolvida. **O vídeo é opcional**: sem vídeo, a receita sai com `"video": null`.
 
-```ts
-registrarProvedorDeImagem({ buscarImagem: async (consulta) => /* URL ou null */ });
-```
+**Imagens (ordem de tentativa)**, todas sem chave de API:
 
-Enquanto não houver provedor, `foto` e `video` das receitas geradas vêm `null`.
+1. Wikipédia em português (`pt.wikipedia.org`), foto do artigo que combina com a receita.
+2. Wikimedia Commons (`commons.wikimedia.org`), usada se a Wikipédia não tiver foto.
+
+Cada URL encontrada é baixada e validada antes de ser usada: precisa ser JPEG, PNG ou WEBP, ter até 5 MB e apontar para um endereço público. Um resultado que não combina com o nome da receita também é descartado. As requisições usam um `User-Agent` identificado, exigido pela política de uso da Wikimedia.
+
+**Limitação:** as imagens da Wikimedia têm licenças livres, mas algumas exigem atribuição do autor, que o contrato da receita não carrega. Antes de publicar as fotos, confira a licença de cada uma.
+
+**Vídeo:** ainda não há provedor de vídeo. `buscarVideo()` devolve `null`, então hoje todas as receitas saem com `"video": null`. Para habilitar, registre um provedor com `registrarProvedorDeVideo(...)`.
+
+Para trocar ou acrescentar fontes de imagem, implemente `ProvedorDeImagem` (em `src/tools/image.tool.ts`) e informe a lista em `registrarProvedorDeImagem([...])`.
 
 ## Versão
 

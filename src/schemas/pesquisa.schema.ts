@@ -26,7 +26,7 @@ export type PesquisaEntrada = z.infer<typeof pesquisaSchema>;
 // Ajuste quando o contrato oficial de receita for definido.
 
 export const receitaIASchema = z.object({
-  titulo: z.string().min(1),
+  titulo: z.string().min(1).describe("Nome comum e curto do prato, como é buscado em sites de receita e de imagens (ex.: \"Feijoada\"), sem nomes criativos"),
   descricao: z.string().min(1),
   tempo: z.string().describe("Tempo total de preparo no formato HH:MM:SS, ex.: 00:40:00"),
   custo: z.string().describe("Custo da receita, no mesmo estilo das receitas encontradas"),
@@ -45,8 +45,9 @@ export const pesquisaIASchema = z.object({
 
 // ---- Saída da API (response_ia) ----
 
+// A foto é sempre uma URL válida (o Chefinho não sugere receita sem foto); o vídeo é opcional
 export const receitaGeradaSchema = receitaIASchema.extend({
-  foto: z.string().nullable(),
+  foto: z.url(),
   video: z.string().nullable(),
 });
 

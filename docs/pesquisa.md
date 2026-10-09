@@ -67,7 +67,7 @@ Pesquisa inteligente de receitas. O **backend faz a pesquisa inicial no banco** 
       ],
       "categorias": ["Almoço"],
       "tags": ["#Rápido"],
-      "foto": null,
+      "foto": "https://upload.wikimedia.org/wikipedia/commons/thumb/exemplo.jpg/800px-exemplo.jpg",
       "video": null
     }
   },
@@ -92,7 +92,10 @@ Isso acontece quando os resultados do banco já cobrem bem a pesquisa, quando a 
 
 ## Sobre `foto` e `video` da receita gerada
 
-Vêm das ferramentas de mídia. Como o provedor externo de imagem/vídeo **ainda não foi definido**, hoje chegam `null` (veja [README.md](README.md#provedores-de-imagem-e-vídeo-pendente)). Se o provedor falhar, a receita é entregue mesmo assim, com `null`.
+- **`foto`** é sempre uma URL válida. Se nenhuma fonte de imagem entregar uma foto utilizável, a rota responde erro `TOOL_ERROR` (502) e **não** devolve a sugestão, mesmo que o Gemini tenha encontrado uma receita nova.
+- **`video`** é opcional: uma URL, ou `null` quando não há vídeo disponível. Não impede a sugestão.
+
+Detalhes das fontes de imagem e da ordem de tentativa estão em [README.md](README.md#provedores-de-imagem-e-vídeo).
 
 ## Contrato da receita gerada (provisório)
 
@@ -108,6 +111,7 @@ Os passos de `modo_preparo` sempre voltam ordenados e numerados a partir de 1.
 | 400 / 413 | `INVALID_REQUEST` |
 | 401 | `UNAUTHORIZED` |
 | 502 | `AI_RESPONSE_INVALID` |
+| 502 | `TOOL_ERROR` (nenhuma foto válida foi encontrada) |
 | 503 | `AI_SERVICE_UNAVAILABLE` |
 | 504 | `AI_TIMEOUT` |
 | 500 | `INTERNAL_ERROR` |

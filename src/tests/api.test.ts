@@ -5,6 +5,7 @@ import { after, afterEach, before, describe, it } from "node:test";
 import { criarApp } from "../app";
 import { env } from "../config/env";
 import { registrarProvedorDeImagem } from "../tools/image.tool";
+import { PROVEDORES_IMAGEM_PADRAO } from "../tools/provedores-imagem";
 
 const PUBLICO = "http://93.184.216.34";
 const { estado, restaurar } = instalarMocks();
@@ -23,8 +24,10 @@ after(() => {
 });
 afterEach(() => {
   estado.googleRequests.length = 0;
+  estado.googleUrls.length = 0;
   estado.responderGemini = () => respostaGemini("Resposta padrão");
-  registrarProvedorDeImagem(null);
+  estado.wikimedia = () => ({ status: 404, body: {} });
+  registrarProvedorDeImagem(PROVEDORES_IMAGEM_PADRAO);
   env.apiKey = undefined;
 });
 
@@ -302,9 +305,16 @@ describe("POST /pesquisa", () => {
       { titulo: "Filé de frango", descricao: "x", foto: "http://x/a.jpg", video: "", tempo: "00:20:00", custo: "Baixo", dificuldade: "Fácil", porcao: 2 },
     ],
   };
+  // IP público: a validação de endereço não depende de DNS nos testes
+  const FOTO = "http://93.184.216.34/macarrao.jpg";
+  const sugestao = () => respostaGemini(JSON.stringify({ tem_sugestao: true, receita: receitaIA }));
+  const provedorQueFalha = { buscarImagem: async () => { throw new Error("provedor fora do ar"); } };
+  const provedorComFoto = (url: string) => ({ buscarImagem: async () => url });
 
-  it("gera receita completa, reordena os passos e deixa foto/vídeo nulos sem provedor", async () => {
-    estado.responderGemini = () => respostaGemini(JSON.stringify({ tem_sugestao: true, receita: receitaIA }));
+  it("gera receita completa com a foto do provedor, reordena os passos e deixa video nulo", async () => {
+    registrarProvedorDeImagem(provedorComFoto(FOTO));
+    estado.midias[FOTO] = { body: JPEG };
+    estado.responderGemini = sugestao;
     const r = await chamar("POST", "/pesquisa", entrada);
 
     assert.equal(r.status, 200);
@@ -316,24 +326,111 @@ describe("POST /pesquisa", () => {
       [1, "Cozinhe o macarrão."],
       [2, "Misture tudo."],
     ]);
-    assert.equal(receita.foto, null);
+    assert.equal(receita.foto, FOTO);
     assert.equal(receita.video, null);
     assert.ok(!JSON.stringify(estado.googleRequests[0]).includes("http://x/a.jpg"), "URLs do banco não vão ao Gemini");
   });
 
-  it("preenche a foto usando o provedor de imagem registrado", async () => {
-    registrarProvedorDeImagem({ buscarImagem: async (q) => `https://cdn.exemplo.com/${encodeURIComponent(q)}.jpg` });
-    estado.responderGemini = () => respostaGemini(JSON.stringify({ tem_sugestao: true, receita: receitaIA }));
+  it("sem nenhum provedor de imagem, não sugere a receita (foto obrigatória)", async () => {
+    registrarProvedorDeImagem(null);
+    estado.responderGemini = sugestao;
     const r = await chamar("POST", "/pesquisa", entrada);
-    assert.equal(r.json.response_ia.receita.foto, "https://cdn.exemplo.com/Macarr%C3%A3o%20com%20frango.jpg");
+
+    assert.equal(r.status, 502);
+    assert.equal(r.json.success, false);
+    assert.equal(r.json.error.code, "TOOL_ERROR");
+    assert.equal(r.json.response_ia, null);
   });
 
-  it("entrega a receita mesmo se o provedor de imagem falhar", async () => {
-    registrarProvedorDeImagem({ buscarImagem: async () => { throw new Error("provedor fora do ar"); } });
-    estado.responderGemini = () => respostaGemini(JSON.stringify({ tem_sugestao: true, receita: receitaIA }));
+  it("usa o próximo provedor quando o primeiro falha", async () => {
+    registrarProvedorDeImagem([provedorQueFalha, provedorComFoto(FOTO)]);
+    estado.midias[FOTO] = { body: JPEG };
+    estado.responderGemini = sugestao;
     const r = await chamar("POST", "/pesquisa", entrada);
+
     assert.equal(r.status, 200);
-    assert.equal(r.json.response_ia.receita.foto, null);
+    assert.equal(r.json.response_ia.receita.foto, FOTO);
+  });
+
+  it("rejeita a URL que não é imagem e continua a busca nos próximos provedores", async () => {
+    const paginaHtml = "http://93.184.216.34/pagina.jpg";
+    estado.midias[paginaHtml] = { body: Buffer.from("<html>erro 404</html>") };
+    registrarProvedorDeImagem([provedorComFoto(paginaHtml), provedorComFoto(FOTO)]);
+    estado.midias[FOTO] = { body: JPEG };
+    estado.responderGemini = sugestao;
+    const r = await chamar("POST", "/pesquisa", entrada);
+
+    assert.equal(r.status, 200);
+    assert.equal(r.json.response_ia.receita.foto, FOTO);
+  });
+
+  it("quando todos os provedores falham, devolve erro controlado e nenhuma sugestão", async () => {
+    registrarProvedorDeImagem([provedorQueFalha, { buscarImagem: async () => null }]);
+    estado.responderGemini = sugestao;
+    const r = await chamar("POST", "/pesquisa", entrada);
+
+    assert.equal(r.status, 502);
+    assert.equal(r.json.error.code, "TOOL_ERROR");
+    assert.equal(r.json.response_ia, null);
+  });
+
+  it("respeita o timeout de um provedor que não responde e segue para a fonte seguinte", async () => {
+    const timeoutAnterior = env.mediaTimeoutMs;
+    env.mediaTimeoutMs = 50;
+    try {
+      estado.wikimedia = (url) =>
+        url.includes("pt.wikipedia.org")
+          ? "pendurar"
+          : { status: 200, body: { query: { pages: { "9": { title: "Macarrão", index: 1, imageinfo: [{ mime: "image/jpeg", thumburl: FOTO }] } } } } };
+      estado.midias[FOTO] = { body: JPEG };
+      estado.responderGemini = sugestao;
+      const r = await chamar("POST", "/pesquisa", entrada);
+
+      assert.equal(r.status, 200);
+      assert.equal(r.json.response_ia.receita.foto, FOTO);
+    } finally {
+      env.mediaTimeoutMs = timeoutAnterior;
+    }
+  });
+
+  it("na Wikipédia, escolhe o resultado que combina com a receita", async () => {
+    estado.wikimedia = () => ({
+      status: 200,
+      body: {
+        query: {
+          pages: {
+            "1": { title: "Trem", index: 1, thumbnail: { source: "http://93.184.216.34/trem.jpg" } },
+            "2": { title: "Macarrão", index: 2, thumbnail: { source: FOTO } },
+          },
+        },
+      },
+    });
+    estado.midias[FOTO] = { body: JPEG };
+    estado.responderGemini = sugestao;
+    const r = await chamar("POST", "/pesquisa", entrada);
+
+    assert.equal(r.json.response_ia.receita.foto, FOTO);
+  });
+
+  it("usa o modelo alternativo do Gemini quando o principal está indisponível", async () => {
+    estado.responderGemini = (_corpo, url) =>
+      url.includes("gemini-3.5-flash-lite")
+        ? { status: 503, body: { error: { code: 503, message: "high demand", status: "UNAVAILABLE" } } }
+        : respostaGemini(JSON.stringify({ tem_sugestao: false }));
+    const r = await chamar("POST", "/pesquisa", entrada);
+
+    assert.equal(r.status, 200);
+    assert.equal(r.json.response_ia.possui_sugestao, false);
+    assert.equal(estado.googleUrls.length, 2);
+    assert.ok(estado.googleUrls[1].includes("gemini-3.1-flash-lite"));
+  });
+
+  it("não troca de modelo quando o erro é de requisição inválida", async () => {
+    estado.responderGemini = () => ({ status: 400, body: { error: { code: 400, message: "Invalid argument", status: "INVALID_ARGUMENT" } } });
+    const r = await chamar("POST", "/pesquisa", entrada);
+
+    assert.ok(r.status >= 500);
+    assert.equal(estado.googleUrls.length, 1);
   });
 
   it("indica que não há sugestão nova", async () => {

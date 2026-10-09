@@ -1,16 +1,17 @@
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
-import { obterModelo } from "../config/gemini";
+import { executarComFallback } from "../config/gemini";
 import { PESQUISA_PROMPT } from "../prompts/pesquisa.prompt";
 import {
   pesquisaIASchema,
   PesquisaEntrada,
   ReceitaGerada,
+  receitaGeradaSchema,
   RespostaPesquisa,
 } from "../schemas/pesquisa.schema";
 import { buscarImagem } from "../tools/image.tool";
 import { buscarVideo } from "../tools/video.tool";
 import { AppError } from "../utils/errors";
-import { chamarIA, sinalDeTimeout } from "../utils/ia";
+import { chamarIA } from "../utils/ia";
 
 function normalizar(texto: string): string {
   return texto
@@ -44,14 +45,15 @@ export async function pesquisarComIA(entrada: PesquisaEntrada): Promise<Resposta
     })),
   };
 
-  const modelo = obterModelo("pesquisa").withStructuredOutput(pesquisaIASchema);
   const resultado = await chamarIA(() =>
-    modelo.invoke(
-      [
-        new SystemMessage(PESQUISA_PROMPT),
-        new HumanMessage(`Dados da pesquisa (JSON):\n${JSON.stringify(dados, null, 2)}`),
-      ],
-      { signal: sinalDeTimeout() }
+    executarComFallback("pesquisa", (modelo, opcoes) =>
+      modelo.withStructuredOutput(pesquisaIASchema).invoke(
+        [
+          new SystemMessage(PESQUISA_PROMPT),
+          new HumanMessage(`Dados da pesquisa (JSON):\n${JSON.stringify(dados, null, 2)}`),
+        ],
+        { signal: opcoes.signal }
+      )
     )
   );
 
@@ -73,8 +75,10 @@ export async function pesquisarComIA(entrada: PesquisaEntrada): Promise<Resposta
     .sort((a, b) => a.ordem_preparo - b.ordem_preparo)
     .map((p, i) => ({ ...p, ordem_preparo: i + 1 }));
 
+  // A foto é obrigatória: se nenhum provedor entregar uma, buscarImagem lança TOOL_ERROR e nada é sugerido.
+  // O vídeo é opcional: sem ele, a receita sai com video: null.
   const [foto, video] = await Promise.all([
-    midiaOuNulo(() => buscarImagem(receita.titulo)),
+    buscarImagem(receita.titulo),
     midiaOuNulo(() => buscarVideo(receita.titulo)),
   ]);
 
@@ -85,5 +89,10 @@ export async function pesquisarComIA(entrada: PesquisaEntrada): Promise<Resposta
     foto,
     video,
   };
+
+  // Confere a saída com o schema antes de devolvê-la ao backend
+  if (!receitaGeradaSchema.safeParse(receitaGerada).success) {
+    throw new AppError("AI_RESPONSE_INVALID", "A receita gerada não atende ao formato esperado.");
+  }
   return { possui_sugestao: true, receita: receitaGerada };
 }

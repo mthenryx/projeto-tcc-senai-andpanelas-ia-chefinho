@@ -1,9 +1,9 @@
 import { AIMessage, BaseMessage, HumanMessage, SystemMessage } from "@langchain/core/messages";
-import { obterModelo } from "../config/gemini";
+import { executarComFallback } from "../config/gemini";
 import { CHAT_SYSTEM_PROMPT } from "../prompts/chat.prompt";
 import type { ChatEntrada, MensagemHistorico } from "../schemas/chat.schema";
 import { AppError } from "../utils/errors";
-import { chamarIA, extrairTexto, sinalDeTimeout } from "../utils/ia";
+import { chamarIA, extrairTexto } from "../utils/ia";
 
 // Monta: SystemMessage + histórico recebido (Human/AI) + pergunta atual (Human).
 // O Gemini exige que a conversa comece pelo usuário e alterne os papéis,
@@ -39,9 +39,9 @@ export function montarMensagensChat(
 
 export async function responderChat(entrada: ChatEntrada): Promise<{ message: string }> {
   const mensagens = montarMensagensChat(entrada.historico_conversa, entrada.pergunta_atual);
-  const modelo = obterModelo("chat");
-
-  const resposta = await chamarIA(() => modelo.invoke(mensagens, { signal: sinalDeTimeout() }));
+  const resposta = await chamarIA(() =>
+    executarComFallback("chat", (modelo, opcoes) => modelo.invoke(mensagens, { signal: opcoes.signal }))
+  );
 
   const message = extrairTexto(resposta.content).trim();
   if (!message) {

@@ -3,6 +3,7 @@ import type { MessageContentComplex } from "@langchain/core/messages";
 import { z } from "zod";
 import { AppError } from "../utils/errors";
 import { baixarArquivo, DownloadError } from "../utils/download";
+import { PROVEDORES_IMAGEM_PADRAO } from "./provedores-imagem";
 
 // ---------------------------------------------------------------------------
 // 1) Analisar imagem recebida por URL: URL -> baixar -> validar -> base64 -> Gemini
@@ -118,32 +119,37 @@ export interface ProvedorDeImagem {
   buscarImagem(consulta: string): Promise<string | null>;
 }
 
-let provedor: ProvedorDeImagem | null = null;
+// Provedores tentados em ordem: se um falhar ou não achar uma foto válida, o próximo é usado
+let provedores: ProvedorDeImagem[] = PROVEDORES_IMAGEM_PADRAO;
 
-export function registrarProvedorDeImagem(novo: ProvedorDeImagem | null): void {
-  provedor = novo;
+// Aceita um provedor, uma lista (em ordem) ou null para remover todos
+export function registrarProvedorDeImagem(novo: ProvedorDeImagem | ProvedorDeImagem[] | null): void {
+  provedores = novo === null ? [] : Array.isArray(novo) ? novo : [novo];
 }
 
 export function provedorDeImagemConfigurado(): boolean {
-  return provedor !== null;
+  return provedores.length > 0;
 }
 
-export async function buscarImagem(consulta: string): Promise<string | null> {
-  if (!provedor) return null;
-  try {
-    return await provedor.buscarImagem(consulta);
-  } catch (err) {
-    console.error("[tool:imagem] falha no provedor:", (err as Error).message);
-    throw new AppError("TOOL_ERROR", "Falha ao buscar imagem no provedor externo.");
+// Devolve a URL de uma foto que foi baixada e validada (imagem real, de tamanho permitido e em endereço público).
+// Se nenhum provedor entregar uma foto válida, lança TOOL_ERROR: a sugestão de receita não pode sair sem foto.
+export async function buscarImagem(consulta: string): Promise<string> {
+  for (const [indice, provedorAtual] of provedores.entries()) {
+    try {
+      const url = await provedorAtual.buscarImagem(consulta);
+      if (!url) continue;
+      await prepararImagem(url); // lança erro se a URL não for uma imagem utilizável
+      return url;
+    } catch (err) {
+      console.warn(`[tool:imagem] provedor ${indice + 1} não retornou foto válida: ${(err as Error).message}`);
+    }
   }
+  throw new AppError("TOOL_ERROR", "Não foi possível obter uma foto para a receita.");
 }
 
 // Versão para o LangChain: pode ser ligada ao modelo com model.bindTools([...]) no futuro
 export const ferramentaBuscarImagem = tool(
-  async ({ consulta }) => {
-    const url = await buscarImagem(consulta);
-    return url ?? "Nenhuma imagem encontrada.";
-  },
+  async ({ consulta }) => buscarImagem(consulta),
   {
     name: "buscar_imagem_receita",
     description: "Busca a URL de uma foto para uma receita ou prato.",

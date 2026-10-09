@@ -1,8 +1,8 @@
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import type { ContentBlock, MessageContentComplex } from "@langchain/core/messages";
-import { obterModelo } from "../../config/gemini";
+import { executarComFallback } from "../../config/gemini";
 import { DecisaoModeracao, decisaoModeracaoSchema } from "../../schemas/moderacao.schema";
-import { chamarIA, sinalDeTimeout } from "../../utils/ia";
+import { chamarIA } from "../../utils/ia";
 
 // Parte comum das três moderações: envia prompt + dados (+ mídia) e recebe { apagar }.
 // Cada tipo de denúncia continua com o seu próprio prompt, schema e service.
@@ -16,11 +16,12 @@ export async function decidirModeracao(
     ...midias,
   ];
 
-  const modelo = obterModelo("moderacao").withStructuredOutput(decisaoModeracaoSchema);
-
   return chamarIA(() =>
-    modelo.invoke([new SystemMessage(promptSistema), new HumanMessage({ content: conteudo as ContentBlock[] })], {
-      signal: sinalDeTimeout(),
-    })
+    executarComFallback("moderacao", (modelo, opcoes) =>
+      modelo.withStructuredOutput(decisaoModeracaoSchema).invoke(
+        [new SystemMessage(promptSistema), new HumanMessage({ content: conteudo as ContentBlock[] })],
+        { signal: opcoes.signal }
+      )
+    )
   );
 }
