@@ -9,7 +9,7 @@ Analisa uma **denúncia de perfil de usuário** e devolve uma decisão de modera
 ## Segurança e privacidade
 
 * **Nunca envie a senha.** Se `dados_usuario` contiver `senha` ou `password`, a requisição será recusada com `400 INVALID_REQUEST`. O valor recebido não será repetido na resposta nem gravado em log.
-* Apenas o nome, o username, a foto de perfil e o banner são encaminhados ao Gemini como dados do perfil.
+* Apenas o nome, o username, a foto de perfil, o banner e os comentários do usuário são encaminhados ao Gemini como dados de análise.
 * Os campos `email` e `data_nascimento` são aceitos, mas **não são enviados ao Gemini**, pois não são necessários para a análise do conteúdo público do perfil.
 * Campos adicionais que não fazem parte do schema são ignorados pelo processo de validação, exceto `senha` e `password`, que são explicitamente recusados.
 
@@ -24,8 +24,13 @@ Analisa uma **denúncia de perfil de usuário** e devolve uma decisão de modera
 | `dados_usuario.username`        | string                          | Sim         | Nome de usuário. De 1 a 100 caracteres.                                                               |
 | `dados_usuario.foto_perfil`     | string (URL), `null` ou ausente | Não         | URL HTTP/HTTPS da foto de perfil. Quando disponível, será obtida e enviada para análise visual.       |
 | `dados_usuario.banner_url`      | string (URL), `null` ou ausente | Não         | URL HTTP/HTTPS do banner do perfil. Quando disponível, será obtida e enviada para análise visual.     |
+| `dados_usuario.comentarios`     | array de strings ou ausente     | Não         | Textos de todos os comentários que o usuário já fez na plataforma. Cada item tem de 1 a 2.000 caracteres. Até 500 itens. Ausente equivale a lista vazia. |
 | `dados_usuario.email`           | string                          | Não         | Aceito pelo schema, mas não enviado ao Gemini.                                                        |
 | `dados_usuario.data_nascimento` | string                          | Não         | Aceita pelo schema, mas não enviada ao Gemini.                                                        |
+
+## Comentários anteriores do usuário
+
+Os comentários enviados em `dados_usuario.comentarios` são entregues ao Gemini como `comentarios_anteriores` (com `total` e `lista`), junto com os dados do perfil e da denúncia. Eles servem de contexto sobre o comportamento geral do usuário. Cada comentário é tratado como independente: o Chefinho não assume que eles se relacionam entre si. A decisão continua sendo um veredito único (`apagar`), tomado com base na denúncia, no perfil, nas imagens e nesse histórico.
 
 ## Análise das imagens
 
@@ -59,7 +64,11 @@ Para conhecer as regras gerais de mídia, consulte [README.md — Mídia: imagen
     "email": "carlos@email.com",
     "data_nascimento": "1990-05-15",
     "foto_perfil": "https://exemplo.com/foto.jpg",
-    "banner_url": "https://exemplo.com/banner.jpg"
+    "banner_url": "https://exemplo.com/banner.jpg",
+    "comentarios": [
+      "Confira meu canal, link na bio!",
+      "Essa receita ficou ótima."
+    ]
   }
 }
 ```

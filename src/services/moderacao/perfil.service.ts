@@ -22,6 +22,12 @@ export async function moderarPerfil(
       nome: usuario.nome,
       username: usuario.username,
     },
+    // Histórico de comentários do usuário, enviado como contexto para o veredito.
+    // Os comentários podem ter contextos diferentes entre si e não se relacionam necessariamente.
+    comentarios_anteriores: {
+      total: usuario.comentarios.length,
+      lista: usuario.comentarios,
+    },
   };
 
   const imagens = await blocosDeImagens([

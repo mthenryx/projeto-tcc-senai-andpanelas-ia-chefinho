@@ -34,6 +34,13 @@ export const moderacaoPerfilSchema = z.object({
     foto_perfil: urlMidiaSchema,
 
     banner_url: urlMidiaSchema,
+
+    // Textos de todos os comentários que o usuário já fez na plataforma (opcional).
+    comentarios: z
+      .array(z.string().trim().min(1).max(2_000))
+      .max(500)
+      .nullish()
+      .transform((v) => v ?? []),
   }),
 });
 
