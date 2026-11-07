@@ -7,6 +7,9 @@ export class DownloadError extends Error {}
 
 const MAX_REDIRECTS = 3;
 
+// A Wikimedia exige um User-Agent identificado (com contato). Sem ele, o download das fotos pode ser recusado.
+export const USER_AGENT = "ChefinhoBot/1.0 (https://github.com/mthenryx/projeto-tcc-senai-andpanelas-ia-chefinho)";
+
 function ipv4Privado(ip: string): boolean {
   const [a, b] = ip.split(".").map(Number);
   return (
@@ -88,7 +91,7 @@ export async function baixarArquivo(urlTexto: string, opcoes: OpcoesDownload): P
       res = await fetch(url.href, {
         redirect: "manual",
         signal: sinal,
-        headers: { accept: opcoes.accept, "user-agent": "ChefinhoBot/1.0" },
+        headers: { accept: opcoes.accept, "user-agent": USER_AGENT },
       });
     } catch (err) {
       const nome = (err as { name?: string }).name;

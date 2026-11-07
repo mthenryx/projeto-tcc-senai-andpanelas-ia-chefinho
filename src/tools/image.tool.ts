@@ -137,11 +137,14 @@ export async function buscarImagem(consulta: string): Promise<string> {
   for (const [indice, provedorAtual] of provedores.entries()) {
     try {
       const url = await provedorAtual.buscarImagem(consulta);
-      if (!url) continue;
+      if (!url) {
+        console.warn(`[tool:imagem] provedor ${indice + 1} não encontrou foto para "${consulta}"`);
+        continue;
+      }
       await prepararImagem(url); // lança erro se a URL não for uma imagem utilizável
       return url;
     } catch (err) {
-      console.warn(`[tool:imagem] provedor ${indice + 1} não retornou foto válida: ${(err as Error).message}`);
+      console.warn(`[tool:imagem] provedor ${indice + 1} não retornou foto válida para "${consulta}": ${(err as Error).message}`);
     }
   }
   throw new AppError("TOOL_ERROR", "Não foi possível obter uma foto para a receita.");

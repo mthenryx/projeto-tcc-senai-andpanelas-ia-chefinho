@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ingredienteIASchema, passoPreparoIASchema } from "./receita.schema";
+import { ingredienteIASchema, LIMITES_RECEITA, passoPreparoIASchema, REGEX_TEMPO } from "./receita.schema";
 
 // ---- Entrada: o backend faz a busca no banco e envia o resultado ----
 
@@ -45,10 +45,21 @@ export const pesquisaIASchema = z.object({
 
 // ---- Saída da API (response_ia) ----
 
-// A foto é sempre uma URL válida (o Chefinho não sugere receita sem foto); o vídeo é opcional
+// A foto é sempre uma URL válida (o Chefinho não sugere receita sem foto); o vídeo é opcional.
+// Os limites são os do banco: a receita só é devolvida se couber em todas as colunas.
 export const receitaGeradaSchema = receitaIASchema.extend({
-  foto: z.url(),
-  video: z.string().nullable(),
+  titulo: z.string().min(1).max(LIMITES_RECEITA.titulo),
+  descricao: z.string().min(1).max(LIMITES_RECEITA.descricao),
+  custo: z.string().max(LIMITES_RECEITA.custo),
+  dificuldade: z.string().max(LIMITES_RECEITA.dificuldade),
+  tempo: z.string().regex(REGEX_TEMPO),
+  modo_preparo: z.array(
+    passoPreparoIASchema.extend({
+      metodo_preparo: z.string().min(1).max(LIMITES_RECEITA.metodoPreparo),
+    })
+  ).min(1),
+  foto: z.url().max(LIMITES_RECEITA.foto),
+  video: z.string().max(LIMITES_RECEITA.video).nullable(),
 });
 
 export type ReceitaGerada = z.infer<typeof receitaGeradaSchema>;

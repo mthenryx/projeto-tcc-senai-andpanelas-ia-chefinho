@@ -12,6 +12,8 @@ import { buscarImagem } from "../tools/image.tool";
 import { buscarVideo } from "../tools/video.tool";
 import { AppError } from "../utils/errors";
 import { chamarIA } from "../utils/ia";
+import { comHashtag, limitarTexto } from "../utils/texto";
+import { LIMITES_RECEITA } from "../schemas/receita.schema";
 
 function normalizar(texto: string): string {
   return texto
@@ -62,7 +64,21 @@ export async function pesquisarComIA(entrada: PesquisaEntrada): Promise<Resposta
     throw new AppError("AI_RESPONSE_INVALID", "O Google Gemini indicou uma sugestão sem enviar a receita.");
   }
 
-  const receita = resultado.receita;
+  // Ajusta os textos aos limites das colunas do banco antes de qualquer outra checagem
+  const original = resultado.receita;
+  const receita = {
+    ...original,
+    titulo: limitarTexto(original.titulo.trim(), LIMITES_RECEITA.titulo),
+    descricao: limitarTexto(original.descricao.trim(), LIMITES_RECEITA.descricao),
+    custo: limitarTexto(original.custo.trim(), LIMITES_RECEITA.custo),
+    dificuldade: limitarTexto(original.dificuldade.trim(), LIMITES_RECEITA.dificuldade),
+    // Tags sempre com "#" na frente, mesmo que o modelo não tenha seguido essa regra
+    tags: original.tags.map(comHashtag),
+    modo_preparo: original.modo_preparo.map((p) => ({
+      ...p,
+      metodo_preparo: limitarTexto(p.metodo_preparo.trim(), LIMITES_RECEITA.metodoPreparo),
+    })),
+  };
 
   // Não sugere de novo uma receita que o banco já devolveu
   const jaExiste = entrada.encontrados_db.some(
@@ -87,7 +103,8 @@ export async function pesquisarComIA(entrada: PesquisaEntrada): Promise<Resposta
     porcao: Math.max(1, Math.round(receita.porcao)),
     modo_preparo: passos,
     foto,
-    video,
+    // Vídeo é opcional: uma URL longa demais para o banco vira "sem vídeo", sem cancelar a receita
+    video: video && video.length <= LIMITES_RECEITA.video ? video : null,
   };
 
   // Confere a saída com o schema antes de devolvê-la ao backend

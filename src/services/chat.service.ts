@@ -1,9 +1,10 @@
 import { AIMessage, BaseMessage, HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { executarComFallback } from "../config/gemini";
 import { CHAT_SYSTEM_PROMPT } from "../prompts/chat.prompt";
-import type { ChatEntrada, MensagemHistorico } from "../schemas/chat.schema";
+import { LIMITE_RESPOSTA_CHAT, type ChatEntrada, type MensagemHistorico } from "../schemas/chat.schema";
 import { AppError } from "../utils/errors";
 import { chamarIA, extrairTexto } from "../utils/ia";
+import { limitarTexto } from "../utils/texto";
 
 // Monta: SystemMessage + histórico recebido (Human/AI) + pergunta atual (Human).
 // O Gemini exige que a conversa comece pelo usuário e alterne os papéis,
@@ -43,7 +44,8 @@ export async function responderChat(entrada: ChatEntrada): Promise<{ message: st
     executarComFallback("chat", (modelo, opcoes) => modelo.invoke(mensagens, { signal: opcoes.signal }))
   );
 
-  const message = extrairTexto(resposta.content).trim();
+  // O prompt pede até 3000 caracteres, mas o corte aqui é a garantia: a resposta precisa caber no banco
+  const message = limitarTexto(extrairTexto(resposta.content).trim(), LIMITE_RESPOSTA_CHAT);
   if (!message) {
     throw new AppError("AI_RESPONSE_INVALID", "O Google Gemini retornou uma resposta vazia.");
   }

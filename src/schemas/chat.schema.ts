@@ -13,3 +13,6 @@ export const chatSchema = z.object({
 
 export type ChatEntrada = z.infer<typeof chatSchema>;
 export type MensagemHistorico = z.infer<typeof mensagemHistoricoSchema>;
+
+// Limite da resposta do Chefinho. A mensagem precisa caber no banco para ser salva no histórico.
+export const LIMITE_RESPOSTA_CHAT = 3000;
