@@ -19,6 +19,9 @@ export const env = {
 
   googleApiKey: process.env.GOOGLE_API_KEY,
 
+  // Chave de acesso da API do Unsplash, usada para buscar a foto das receitas
+  unsplashAccessKey: process.env.UNSPLASH_ACCESS_KEY?.trim() || undefined,
+
   geminiModel:
     process.env.GEMINI_MODEL?.trim() || "gemini-3.5-flash-lite",
 

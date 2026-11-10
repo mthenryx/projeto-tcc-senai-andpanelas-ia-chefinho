@@ -102,6 +102,7 @@ O formato é identificado pelo conteúdo do arquivo, não pela extensão. URLs q
 | `PORT` | Não | Porta do servidor (padrão `3001`) |
 | `CHEFINHO_API_KEY` | Não | Se definida, liga a autenticação por `x-api-key` |
 | `GEMINI_MODEL` | Não | Troca o modelo (padrão `gemini-3.5-flash-lite`) |
+| `UNSPLASH_ACCESS_KEY` | Sim | Access Key da API do Unsplash (busca das fotos das receitas) |
 | `AI_TIMEOUT_MS` | Não | Tempo máximo de espera pelo Gemini (padrão `60000`) |
 | `MEDIA_TIMEOUT_MS` | Não | Tempo máximo para baixar uma mídia (padrão `10000`) |
 
@@ -131,14 +132,11 @@ Para as rotas POST, o mais simples é usar Postman ou Insomnia com `Body → raw
 
 Usados pela rota de pesquisa para completar uma receita sugerida. **A foto é obrigatória**: se nenhum provedor entregar uma foto válida, a rota responde `TOOL_ERROR` e nenhuma sugestão é devolvida. **O vídeo é opcional**: sem vídeo, a receita sai com `"video": null`.
 
-**Imagens (ordem de tentativa)**, todas sem chave de API:
+**Imagens**: a foto vem da API do Unsplash (`api.unsplash.com`). A busca é feita com o título da receita em inglês (campo `titulo_ingles`, gerado pelo Gemini), pois a pesquisa do Unsplash funciona melhor com termos em inglês. Usa-se a foto de tamanho `regular` do primeiro resultado. A chave vem de `UNSPLASH_ACCESS_KEY` no `.env`.
 
-1. Wikipédia em português (`pt.wikipedia.org`), foto do artigo que combina com a receita.
-2. Wikimedia Commons (`commons.wikimedia.org`), usada se a Wikipédia não tiver foto.
+Cada URL encontrada é baixada e validada antes de ser usada: precisa ser JPEG, PNG ou WEBP, ter até 5 MB e apontar para um endereço público. Ao usar a foto, o backend também informa o download ao Unsplash, como a API exige.
 
-Cada URL encontrada é baixada e validada antes de ser usada: precisa ser JPEG, PNG ou WEBP, ter até 5 MB e apontar para um endereço público. Um resultado que não combina com o nome da receita também é descartado. As requisições usam um `User-Agent` identificado, exigido pela política de uso da Wikimedia.
-
-**Limitação:** as imagens da Wikimedia têm licenças livres, mas algumas exigem atribuição do autor, que o contrato da receita não carrega. Antes de publicar as fotos, confira a licença de cada uma.
+**Pendências:** a resposta da API não traz o nome do fotógrafo, e as diretrizes do Unsplash pedem a atribuição ("Foto por ... no Unsplash"). Como o contrato da receita não tem esse campo, ele precisa ser incluído antes de publicar as fotos no app.
 
 **Vídeo:** ainda não há provedor de vídeo. `buscarVideo()` devolve `null`, então hoje todas as receitas saem com `"video": null`. Para habilitar, registre um provedor com `registrarProvedorDeVideo(...)`.
 

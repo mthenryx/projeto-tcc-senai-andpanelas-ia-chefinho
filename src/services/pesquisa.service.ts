@@ -65,7 +65,8 @@ export async function pesquisarComIA(entrada: PesquisaEntrada): Promise<Resposta
   }
 
   // Ajusta os textos aos limites das colunas do banco antes de qualquer outra checagem
-  const original = resultado.receita;
+  // titulo_ingles serve só para a busca da foto no Unsplash; não faz parte da receita devolvida
+  const { titulo_ingles, ...original } = resultado.receita;
   const receita = {
     ...original,
     titulo: limitarTexto(original.titulo.trim(), LIMITES_RECEITA.titulo),
@@ -94,7 +95,7 @@ export async function pesquisarComIA(entrada: PesquisaEntrada): Promise<Resposta
   // A foto é obrigatória: se nenhum provedor entregar uma, buscarImagem lança TOOL_ERROR e nada é sugerido.
   // O vídeo é opcional: sem ele, a receita sai com video: null.
   const [foto, video] = await Promise.all([
-    buscarImagem(receita.titulo),
+    buscarImagem(titulo_ingles),
     midiaOuNulo(() => buscarVideo(receita.titulo)),
   ]);
 

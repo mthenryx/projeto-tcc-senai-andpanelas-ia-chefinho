@@ -2,118 +2,70 @@ import { env } from "../config/env";
 import { USER_AGENT } from "../utils/download";
 import type { ProvedorDeImagem } from "./image.tool";
 
-const TIPOS_DE_IMAGEM = ["image/jpeg", "image/png", "image/webp"];
+const API_UNSPLASH = "https://api.unsplash.com";
 
-function normalizar(texto: string): string {
-  return texto.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+async function chamarUnsplash(url: URL): Promise<any> {
+  if (!env.unsplashAccessKey) throw new Error("UNSPLASH_ACCESS_KEY não está configurada");
+
+  const res = await fetch(url, {
+    headers: {
+      authorization: `Client-ID ${env.unsplashAccessKey}`,
+      "accept-version": "v1",
+      accept: "application/json",
+      "user-agent": USER_AGENT,
+    },
+    signal: AbortSignal.timeout(env.mediaTimeoutMs),
+  });
+  if (!res.ok) throw new Error(`o Unsplash respondeu com status ${res.status}`);
+  return res.json();
 }
 
-// Exige que o título do resultado compartilhe ao menos uma palavra relevante com a receita,
-// para não entregar uma foto aleatória da busca
-function combinaComConsulta(titulo: string, consulta: string): boolean {
-  const palavras = normalizar(consulta)
-    .split(/[^a-z0-9]+/)
-    .filter((p) => p.length >= 4);
-  const alvo = normalizar(titulo);
-  return palavras.some((p) => alvo.includes(p));
+// A busca do Unsplash funciona com termos em inglês, por isso a consulta chega como titulo_ingles.
+// content_filter=high evita fotos impróprias em uma busca feita a partir de texto do usuário.
+async function buscarFotoNoUnsplash(termo: string): Promise<{ url: string; downloadLocation?: string } | null> {
+  const url = new URL("/search/photos", API_UNSPLASH);
+  url.search = new URLSearchParams({ query: termo, per_page: "1", content_filter: "high" }).toString();
+
+  const dados = await chamarUnsplash(url);
+  const foto = dados?.results?.[0];
+  const imagem = foto?.urls?.regular;
+  if (!imagem) return null;
+
+  return { url: imagem, downloadLocation: foto.links?.download_location };
 }
 
-// Ordem de tentativa: o título completo primeiro ("Frango Xadrez") e, se não achar foto, só a
-// primeira palavra principal ("Frango"). Palavras seguintes, como "Xadrez", não entram no fallback
-// porque puxam fotos de outro assunto (ex.: tabuleiro de xadrez).
+// Exigência da API do Unsplash: informar o download sempre que uma foto é usada no app
+async function registrarDownload(downloadLocation: string): Promise<void> {
+  await chamarUnsplash(new URL(downloadLocation));
+}
+
+// Termos tentados em ordem: o nome completo e, se não houver foto, a palavra principal
+// (ex.: "Chicken stroganoff" -> "Chicken"). Palavras curtas como "with" ou "de" não entram no fallback.
 function termosDeBusca(consulta: string): string[] {
   const principal = consulta
     .split(/\s+/)
     .map((p) => p.replace(/[^\p{L}\p{N}]/gu, ""))
-    .find((p) => normalizar(p).length >= 4);
+    .find((p) => p.length >= 4);
   return [...new Set([consulta, ...(principal ? [principal] : [])])];
 }
 
-async function consultarWikimedia(base: string, parametros: Record<string, string>): Promise<any> {
-  const url = new URL(base);
-  url.search = new URLSearchParams({ ...parametros, format: "json" }).toString();
-
-  const res = await fetch(url, {
-    headers: { "user-agent": USER_AGENT, accept: "application/json" },
-    signal: AbortSignal.timeout(env.mediaTimeoutMs),
-  });
-  if (!res.ok) throw new Error(`a Wikimedia respondeu com status ${res.status}`);
-  return res.json();
-}
-
-async function buscarNaWikipedia(termo: string): Promise<string | null> {
-  const dados = await consultarWikimedia("https://pt.wikipedia.org/w/api.php", {
-    action: "query",
-    generator: "search",
-    gsrsearch: termo,
-    gsrlimit: "10",
-    prop: "pageimages",
-    piprop: "thumbnail",
-    pithumbsize: "800",
-  });
-
-  const paginas = Object.values(dados?.query?.pages ?? {}) as {
-    title: string;
-    index: number;
-    thumbnail?: { source?: string };
-  }[];
-
-  const melhor = paginas
-    .sort((a, b) => a.index - b.index)
-    .find((p) => p.thumbnail?.source && combinaComConsulta(p.title, termo));
-
-  return melhor?.thumbnail?.source ?? null;
-}
-
-async function buscarNaCommons(termo: string): Promise<string | null> {
-  const dados = await consultarWikimedia("https://commons.wikimedia.org/w/api.php", {
-    action: "query",
-    generator: "search",
-    gsrnamespace: "6", // namespace de arquivos
-    gsrsearch: termo,
-    gsrlimit: "10",
-    prop: "imageinfo",
-    iiprop: "url|mime",
-    iiurlwidth: "800",
-  });
-
-  const arquivos = Object.values(dados?.query?.pages ?? {}) as {
-    title: string;
-    index: number;
-    imageinfo?: { mime?: string; thumburl?: string }[];
-  }[];
-
-  const melhor = arquivos
-    .sort((a, b) => a.index - b.index)
-    .find((a) => {
-      const info = a.imageinfo?.[0];
-      return !!info?.thumburl && TIPOS_DE_IMAGEM.includes(info.mime ?? "") && combinaComConsulta(a.title.replace(/^File:/i, ""), termo);
-    });
-
-  return melhor?.imageinfo?.[0]?.thumburl ?? null;
-}
-
-// Fotos de artigos da Wikipédia em português (melhor cobertura de pratos brasileiros)
-export const wikipediaPt: ProvedorDeImagem = {
+// Fotos da API do Unsplash (https://unsplash.com/developers)
+export const unsplash: ProvedorDeImagem = {
   async buscarImagem(consulta) {
     for (const termo of termosDeBusca(consulta)) {
-      const url = await buscarNaWikipedia(termo);
-      if (url) return url;
-    }
-    return null;
-  },
-};
+      const foto = await buscarFotoNoUnsplash(termo);
+      if (!foto) continue;
 
-// Fotos do repositório de mídia livre da Wikimedia (alternativa quando a Wikipédia não tem a foto)
-export const wikimediaCommons: ProvedorDeImagem = {
-  async buscarImagem(consulta) {
-    for (const termo of termosDeBusca(consulta)) {
-      const url = await buscarNaCommons(termo);
-      if (url) return url;
+      if (foto.downloadLocation) {
+        registrarDownload(foto.downloadLocation).catch((err) =>
+          console.warn(`[tool:imagem] aviso de download do Unsplash não foi registrado: ${(err as Error).message}`)
+        );
+      }
+      return foto.url;
     }
     return null;
   },
 };
 
 // Ordem de tentativa: se um provedor falhar ou não achar uma foto válida, o próximo é usado
-export const PROVEDORES_IMAGEM_PADRAO: ProvedorDeImagem[] = [wikipediaPt, wikimediaCommons];
+export const PROVEDORES_IMAGEM_PADRAO: ProvedorDeImagem[] = [unsplash];

@@ -26,7 +26,8 @@ export type PesquisaEntrada = z.infer<typeof pesquisaSchema>;
 // Ajuste quando o contrato oficial de receita for definido.
 
 export const receitaIASchema = z.object({
-  titulo: z.string().min(1).describe("Nome comum e curto do prato, como é buscado em sites de receita e de imagens (ex.: \"Feijoada\"), sem nomes criativos"),
+  titulo: z.string().min(1).describe("Nome comum e curto do prato em português, como é buscado em sites de receita (ex.: \"Feijoada\"), sem nomes criativos"),
+  titulo_ingles: z.string().min(1).describe("Termo de busca em inglês para achar a foto no Unsplash: 1 a 3 palavras genéricas, como um fotógrafo marcaria a foto (ex.: \"Chicken stroganoff\"). Nunca é exibido ao usuário"),
   descricao: z.string().min(1),
   tempo: z.string().describe("Tempo total de preparo no formato HH:MM:SS, ex.: 00:40:00"),
   custo: z.string().describe("Custo da receita, no mesmo estilo das receitas encontradas"),
@@ -47,7 +48,7 @@ export const pesquisaIASchema = z.object({
 
 // A foto é sempre uma URL válida (o Chefinho não sugere receita sem foto); o vídeo é opcional.
 // Os limites são os do banco: a receita só é devolvida se couber em todas as colunas.
-export const receitaGeradaSchema = receitaIASchema.extend({
+export const receitaGeradaSchema = receitaIASchema.omit({ titulo_ingles: true }).extend({
   titulo: z.string().min(1).max(LIMITES_RECEITA.titulo),
   descricao: z.string().min(1).max(LIMITES_RECEITA.descricao),
   custo: z.string().max(LIMITES_RECEITA.custo),

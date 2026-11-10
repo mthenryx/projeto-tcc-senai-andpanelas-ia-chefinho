@@ -5,7 +5,7 @@ import { after, afterEach, before, describe, it } from "node:test";
 import { criarApp } from "../app";
 import { env } from "../config/env";
 import { registrarProvedorDeImagem } from "../tools/image.tool";
-import { PROVEDORES_IMAGEM_PADRAO } from "../tools/provedores-imagem";
+import { PROVEDORES_IMAGEM_PADRAO, unsplash } from "../tools/provedores-imagem";
 
 const PUBLICO = "http://93.184.216.34";
 const { estado, restaurar } = instalarMocks();
@@ -26,7 +26,8 @@ afterEach(() => {
   estado.googleRequests.length = 0;
   estado.googleUrls.length = 0;
   estado.responderGemini = () => respostaGemini("Resposta padrão");
-  estado.wikimedia = () => ({ status: 404, body: {} });
+  estado.unsplash = () => ({ status: 404, body: {} });
+  estado.unsplashUrls.length = 0;
   registrarProvedorDeImagem(PROVEDORES_IMAGEM_PADRAO);
   env.apiKey = undefined;
 });
@@ -286,6 +287,7 @@ describe("POST /moderacao/perfil", () => {
 describe("POST /pesquisa", () => {
   const receitaIA = {
     titulo: "Macarrão com frango",
+    titulo_ingles: "Pasta with chicken",
     descricao: "Macarrão cremoso com frango desfiado.",
     tempo: "00:30:00",
     custo: "Baixo",
@@ -322,6 +324,7 @@ describe("POST /pesquisa", () => {
     assert.equal(r.json.response_ia.possui_sugestao, true);
     const receita = r.json.response_ia.receita;
     assert.equal(receita.titulo, "Macarrão com frango");
+    assert.equal(receita.titulo_ingles, undefined, "titulo_ingles é só para a busca da foto");
     assert.deepEqual(receita.modo_preparo.map((p: any) => [p.ordem_preparo, p.metodo_preparo]), [
       [1, "Cozinhe o macarrão."],
       [2, "Misture tudo."],
@@ -378,10 +381,8 @@ describe("POST /pesquisa", () => {
     const timeoutAnterior = env.mediaTimeoutMs;
     env.mediaTimeoutMs = 50;
     try {
-      estado.wikimedia = (url) =>
-        url.includes("pt.wikipedia.org")
-          ? "pendurar"
-          : { status: 200, body: { query: { pages: { "9": { title: "Macarrão", index: 1, imageinfo: [{ mime: "image/jpeg", thumburl: FOTO }] } } } } };
+      estado.unsplash = () => "pendurar";
+      registrarProvedorDeImagem([unsplash, provedorComFoto(FOTO)]);
       estado.midias[FOTO] = { body: JPEG };
       estado.responderGemini = sugestao;
       const r = await chamar("POST", "/pesquisa", entrada);
@@ -393,23 +394,40 @@ describe("POST /pesquisa", () => {
     }
   });
 
-  it("na Wikipédia, escolhe o resultado que combina com a receita", async () => {
-    estado.wikimedia = () => ({
-      status: 200,
-      body: {
-        query: {
-          pages: {
-            "1": { title: "Trem", index: 1, thumbnail: { source: "http://93.184.216.34/trem.jpg" } },
-            "2": { title: "Macarrão", index: 2, thumbnail: { source: FOTO } },
-          },
-        },
-      },
-    });
+  it("se o Unsplash não achar o título completo em inglês, tenta a palavra principal", async () => {
+    estado.unsplash = (url) => {
+      if (!url.includes("/search/photos")) return { status: 200, body: { url: FOTO } };
+      if (url.includes("query=Pasta+with+chicken")) return { status: 200, body: { total: 0, results: [] } };
+      return { status: 200, body: { total: 1, results: [{ urls: { regular: FOTO }, links: {} }] } };
+    };
+    estado.midias[FOTO] = { body: JPEG };
+    estado.responderGemini = sugestao;
+    const r = await chamar("POST", "/pesquisa", entrada);
+
+    assert.equal(r.status, 200);
+    assert.equal(r.json.response_ia.receita.foto, FOTO);
+    assert.ok(estado.unsplashUrls.some((u) => u.includes("query=Pasta&")), "tentou a palavra principal");
+  });
+
+  it("busca a foto no Unsplash pelo título em inglês e avisa o download da foto", async () => {
+    estado.unsplash = (url) =>
+      url.includes("/search/photos")
+        ? {
+            status: 200,
+            body: {
+              total: 1,
+              results: [{ urls: { regular: FOTO }, links: { download_location: "https://api.unsplash.com/photos/abc/download" } }],
+            },
+          }
+        : { status: 200, body: { url: FOTO } };
     estado.midias[FOTO] = { body: JPEG };
     estado.responderGemini = sugestao;
     const r = await chamar("POST", "/pesquisa", entrada);
 
     assert.equal(r.json.response_ia.receita.foto, FOTO);
+    const busca = estado.unsplashUrls.find((u) => u.includes("/search/photos"));
+    assert.ok(busca?.includes("query=Pasta+with+chicken"), "a busca usa o título em inglês");
+    assert.ok(estado.unsplashUrls.some((u) => u.includes("/download")), "o download da foto é informado ao Unsplash");
   });
 
   it("usa o modelo alternativo do Gemini quando o principal está indisponível", async () => {

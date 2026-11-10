@@ -27,8 +27,9 @@ export interface EstadoMock {
   googleUrls: string[];
   midias: Record<string, { status?: number; body: Buffer }>;
   responderGemini: (corpo: any, url: string) => { status: number; body: any };
-  // Respostas das APIs da Wikimedia; "pendurar" simula um servidor que não responde
-  wikimedia: (url: string) => { status: number; body: any } | "pendurar";
+  // Respostas da API do Unsplash; "pendurar" simula um servidor que não responde
+  unsplash: (url: string) => { status: number; body: any } | "pendurar";
+  unsplashUrls: string[];
 }
 
 // Troca o fetch global: o Google e as URLs de mídia são simulados; o resto passa direto
@@ -39,7 +40,8 @@ export function instalarMocks() {
     googleUrls: [],
     midias: {},
     responderGemini: () => respostaGemini("Resposta padrão"),
-    wikimedia: () => ({ status: 404, body: {} }),
+    unsplash: () => ({ status: 404, body: {} }),
+    unsplashUrls: [],
   };
 
   globalThis.fetch = (async (entrada: any, init?: any) => {
@@ -56,8 +58,9 @@ export function instalarMocks() {
       });
     }
 
-    if (url.includes("wikipedia.org/") || url.includes("wikimedia.org/w/")) {
-      const resposta = estado.wikimedia(url);
+    if (url.includes("api.unsplash.com/")) {
+      estado.unsplashUrls.push(url);
+      const resposta = estado.unsplash(url);
       if (resposta === "pendurar") {
         return new Promise<Response>((_, rejeitar) =>
           init?.signal?.addEventListener("abort", () =>
