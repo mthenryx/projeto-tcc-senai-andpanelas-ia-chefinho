@@ -27,6 +27,8 @@ export const moderacaoPerfilSchema = z.object({
 
     username: z.string().trim().min(1).max(100),
 
+    descricao: z.string().trim().max(200).nullish(),
+
     email: z.string().optional(),
 
     data_nascimento: z.string().optional(),

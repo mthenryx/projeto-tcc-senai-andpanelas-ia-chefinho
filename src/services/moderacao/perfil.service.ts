@@ -21,6 +21,7 @@ export async function moderarPerfil(
     perfil: {
       nome: usuario.nome,
       username: usuario.username,
+      descricao: usuario.descricao ?? "",
     },
     // Histórico de comentários do usuário, enviado como contexto para o veredito.
     // Os comentários podem ter contextos diferentes entre si e não se relacionam necessariamente.
